@@ -1,29 +1,76 @@
 import tkinter as tk
 import requests
 import time
+import os
+from dotenv import load_dotenv
 
-def get_weather(canvas):
+# Load environment variables from .env file
+load_dotenv()
+
+def get_weather(event=None): # Added event=None to handle both button click and <Return> key press
     city = textfield.get()
-    api = "https://api.openweathermap.org/data/2.5/weather?q=" + city + "&appid=eff3684545b46fd01e0368f61f7ba624"
-    json_data = requests.get(api).json()
-    condition = json_data["weather"][0]['main']
-    temp = int(json_data['main']['temp'] - 273.15)
-    min_temp = int(json_data['main']['temp_min'] - 273.15)
-    max_temp = int(json_data['main']['temp_max'] - 273.15)
-    pressure = json_data['main']['pressure']
-    humidity = json_data['main']['humidity']
-    wind = json_data['wind']['speed']
-    sunrise = time.strftime("%I:%M:%S", time.gmtime(json_data['sys']['sunrise'] - 21600))
-    sunset = time.strftime("%I:%M:%S", time.gmtime(json_data['sys']['sunset'] - 21600))
+    # Retrieve API key from environment variable
+    api_key = os.getenv("API_KEY") # Assuming your .env has API_KEY="your_api_key_here"
 
-    final_info = condition + "\n" + str(temp) + "°C"
-    final_data = "\n" + "Max Temp: " + str(max_temp) + "\n" + "Min Temp: " + str(min_temp) + "\n" + "Pressure: " + str(pressure) + "\n" + "Humidity: " + str(humidity) + "\n" + "Wind Speed: " + str(wind) + "\n" + "Sunrise: " + sunrise + "\n" + "Sunset: " + sunset
-    label1.config(text  = final_info)
-    label2.config(text = final_data)
+    if not api_key:
+        label1.config(text="Error: API Key not found.")
+        label2.config(text="Please set API_KEY in your .env file.")
+        return
+
+    api = f"https://api.openweathermap.org/data/2.5/weather?q={city}&appid={api_key}"
+    
+    try:
+        json_data = requests.get(api).json()
+
+        if json_data.get("cod") == "404":
+            label1.config(text="City Not Found 🏙️")
+            label2.config(text="")
+            return
+        elif json_data.get("cod") != 200:
+            label1.config(text=f"Error: {json_data.get('message', 'Unknown error')}")
+            label2.config(text="")
+            return
+
+        condition = json_data["weather"][0]['main']
+        temp = int(json_data['main']['temp'] - 273.15)
+        min_temp = int(json_data['main']['temp_min'] - 273.15)
+        max_temp = int(json_data['main']['temp_max'] - 273.15)
+        pressure = json_data['main']['pressure']
+        humidity = json_data['main']['humidity']
+        wind = json_data['wind']['speed']
+        
+        # OpenWeatherMap provides UTC timestamps, convert to local time.
+        # The offset for India (IST) is UTC+5:30.
+        # time.gmtime returns struct_time in UTC. Adding 19800 seconds (5.5 hours) converts it to IST.
+        # This assumes the system's timezone is not set to IST or handles it correctly.
+        # For simplicity and to directly get IST, adding the offset is a straightforward way.
+        sunrise_utc_timestamp = json_data['sys']['sunrise']
+        sunset_utc_timestamp = json_data['sys']['sunset']
+        
+        # Convert to IST (UTC + 5 hours 30 minutes = 19800 seconds)
+        sunrise_ist = time.strftime("%I:%M:%S %p", time.gmtime(sunrise_utc_timestamp + 19800))
+        sunset_ist = time.strftime("%I:%M:%S %p", time.gmtime(sunset_utc_timestamp + 19800))
+
+
+        final_info = f"{condition} \n{temp}°C"
+        final_data = (f"\nMax Temp: {max_temp}°C\nMin Temp: {min_temp}°C"
+                      f"\nPressure: {pressure} hPa\nHumidity: {humidity}%"
+                      f"\nWind Speed: {wind} m/s\nSunrise: {sunrise_ist}\nSunset: {sunset_ist}")
+        
+        label1.config(text=final_info)
+        label2.config(text=final_data)
+
+    except requests.exceptions.ConnectionError:
+        label1.config(text="Network Error 🌐")
+        label2.config(text="Please check your internet connection.")
+    except Exception as e:
+        label1.config(text="An Error Occurred 🐛")
+        label2.config(text=f"Details: {e}")
+
 
 canvas = tk.Tk()
 canvas.geometry("600x500")
-canvas.title("Weather App")
+canvas.title("Weather App ☀️")
 
 f = ("poppins", 15, "bold")
 t = ("poppins", 35, "bold")
